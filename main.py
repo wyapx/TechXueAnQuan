@@ -1,18 +1,22 @@
 import asyncio
+import logging
 import json
+import os.path
 import re
-import traceback
+import argparse
 from typing import Set, List
 
 from utils.api import get_homework, sign, login
 from utils.httpcat import HttpCat
 
+parser = argparse.ArgumentParser()
+parser.add_argument("-c", "--config-path", type=str, required=True, help="your config file path")
+
 
 async def get_page(url: str) -> str:
     resp = await HttpCat.request("GET", url)
     if resp.code != 200:
-        print(resp.text())
-        raise ValueError(url+resp.status)
+        raise AssertionError(url, resp.code)
     return resp.text()
 
 
@@ -28,11 +32,8 @@ async def get_unfinish_spid(cookie: dict) -> Set[int]:
 
     sp_ids = set()
     for url in need_to_work:
-        try:
-            html = await get_page(url)
-        except ValueError as e:
-            print(e)
-            continue
+        html = await get_page(url)
+
         title = re.search("<title>(.*?)</title>", html)
         if title.group(1).startswith("跳转中"):
             if match := re.findall(r"location.replace\((.*?)\+", html):
@@ -55,32 +56,36 @@ async def do_it(username: str, password: str) -> bool:
     login_resp = await login(username, password)
     ret = login_resp.json()
     if ret["err_code"]:
-        print(f"User: {username}: {ret['err_desc']}")
+        logging.error(f"User={username}: {ret['err_desc']}")
         return False
     spid = await get_unfinish_spid(login_resp.cookies)
-    print(list(spid), "not finish")
+    logging.info(f"{list(spid)} not finish")
+
     for i in spid:
         for s in range(1, 16):
             result = await sign(i, s, login_resp.cookies)
             if not (result["result"] or result["httpCode"] == 200):
-                print(f"spid: {i}, step: {s}; return an error: [{result['httpCode']}]{result['msg']}")
+                logging.warning(f"At:spid={i},step={s} raise an error: [{result['httpCode']}]{result['msg']}")
             elif result["httpCode"] == 0:  # done
-                print(f"spid: {i}: all done")
+                logging.info(f"At:spid={i}: finished")
                 break
             else:
-                print(f"spid: {i}, step: {s}: done")
-    print("all finished")
+                logging.info(f"At:spid={i},step={s}: finished")
+    logging.info(f"User={username}: finished")
     return True
 
 
-async def main():
-    for (name, passwd) in load_account("accounts.json"):
-        print("fetching:", name)
+async def main(path: str):
+    for (name, passwd) in load_account(os.path.abspath(path)):
+        logging.info(f"fetching: {name}")
         try:
-            await do_it(name, passwd)
+            if not await do_it(name, passwd):
+                logging.error(f"User={name}: login failed")
         except:
-            traceback.print_exc()
+            logging.exception("Unknown Error:")
 
 
 if __name__ == '__main__':
-    asyncio.run(main())
+    logging.basicConfig(level=logging.INFO)
+    args = parser.parse_args()
+    asyncio.run(main(args.config_path))
