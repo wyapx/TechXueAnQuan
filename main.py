@@ -64,11 +64,11 @@ async def do_it(username: str, password: str) -> bool:
     for i in spid:
         for s in range(1, 16):
             result = await sign(i, s, login_resp.cookies)
-            if not (result["result"] or result["httpCode"] == 200):
-                logging.warning(f"At:spid={i},step={s} raise an error: [{result['httpCode']}]{result['msg']}")
-            elif result["httpCode"] == 0:  # done
+            if result["httpCode"] == 0:  # done
                 logging.info(f"At:spid={i}: finished")
                 break
+            elif not (result["result"] or result["httpCode"] == 200):
+                logging.warning(f"At:spid={i},step={s} raise an error: [{result['httpCode']}]{result['msg']}")
             else:
                 logging.info(f"At:spid={i},step={s}: finished")
     logging.info(f"User={username}: finished")
