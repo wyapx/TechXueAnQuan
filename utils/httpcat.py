@@ -36,6 +36,11 @@ class HttpResponse:
         return self.decompressed_body.decode(encoding, errors)
 
 
+async def _read_chunked(reader: asyncio.StreamReader):
+    while l := (await reader.readline()).rstrip(b"\r\n"):
+        yield await reader.readexactly(int(l, 16))
+
+
 class HttpCat:
     @staticmethod
     def _encode_header(
@@ -94,12 +99,19 @@ class HttpCat:
                     header[k.title()] = v
             else:
                 break
+        body = bytearray()
+        if header.get("Transfer-Encoding") == "chunked":
+            async for bl in _read_chunked(reader):
+                body += bl
+        elif "Content-Length" in header:
+            body += await reader.readexactly(int(header["Content-Length"]))
+        else:
+            body += await reader.read()
         return HttpResponse(
             int(code),
             status,
             header,
-            await reader.read() if "Content-Length" not in header
-            else await reader.readexactly(int(header["Content-Length"])),
+            body,
             cookies
         )
 
