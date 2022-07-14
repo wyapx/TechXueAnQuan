@@ -1,0 +1,31 @@
+name: dailycheckin
+on:
+  # Runs daily at 6:30
+  # schedule:
+  #   - cron: "30 06 * * *"
+  workflow_dispatch:
+env:
+  TZ: Asia/Shanghai
+jobs:
+  dailycheckin:
+    runs-on: ubuntu-latest
+    name: dailycheckin
+    steps:
+      - name: Set up Python 🚀
+        uses: actions/setup-python@v2
+        with:
+          python-version: "3.9"
+      - name: python cache 🚀
+        uses: actions/cache@v2
+        with:
+          path: "~/.cache/pip"
+          key: "${{ runner.os }}-pip-cache-${{ hashFiles('setup.cfg') }}"
+          restore-keys: |
+            "${{ runner.os }}-pip-cache-"
+            "${{ runner.os }}-pip-"
+      - name: Runs 🚀
+        run: |
+          # 将环境变量中的json文件地址内容下载并写入config.json
+          wget ${{secrets.configUrl}} -O config.json
+          pip install asyncio logging argparse --user
+          py main.py config.json
